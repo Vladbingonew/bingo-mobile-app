@@ -225,7 +225,6 @@ export default function GameRunner({ game, token, user, callSpeed, audioLanguage
   const [countdown, setCountdown] = useState(callSpeed);
   const [checkResult, setCheckResult] = useState(null);
   
-  // --- OFFLINE FIX: Local Sequence Engine ---
   const [gameSequence, setGameSequence] = useState([]);
   const sequenceIndexRef = useRef(0);
 
@@ -238,7 +237,6 @@ export default function GameRunner({ game, token, user, callSpeed, audioLanguage
     return (totalPot - commissionAmount).toFixed(2);
   })();
 
-  // 1. Load the offline sequence from memory when component mounts
   useEffect(() => {
     try {
       const storedSeq = localStorage.getItem('vlad:activeGameSequence');
@@ -261,34 +259,28 @@ export default function GameRunner({ game, token, user, callSpeed, audioLanguage
     });
   };
 
-  // 2. The Local Timer Engine (Replaces the WebSocket completely)
   useEffect(() => {
     if (!hasStarted || isPaused || isAudioPlaying) return;
     
     const timerId = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          // TIME TO CALL THE NEXT BALL
           const currentIndex = sequenceIndexRef.current;
           
           if (currentIndex < gameSequence.length) {
             const newNumber = gameSequence[currentIndex];
             
-            // Update the screen UI
             setCalledNumbers(prevSet => { const next = new Set(prevSet); next.add(newNumber); return next; });
             setCurrentNumber(prevNum => { if (prevNum) { setCallHistory(h => [prevNum, ...h]); } return newNumber; });
             
-            // Move pointer to the next ball
             sequenceIndexRef.current = currentIndex + 1;
             
-            // Play Audio
             const formattedNum = newNumber < 10 ? "0" + newNumber : newNumber;
             setIsAudioPlaying(true);
             playAudio("/audio/" + voiceFolder + "/" + getBingoLetter(newNumber) + formattedNum + ".mp3", () => {
               setIsAudioPlaying(false);
             });
           } else {
-            // All 75 balls have been called
             setIsPaused(true);
           }
           return callSpeed;
@@ -300,16 +292,64 @@ export default function GameRunner({ game, token, user, callSpeed, audioLanguage
     return () => clearInterval(timerId);
   }, [hasStarted, isPaused, isAudioPlaying, callSpeed, gameSequence, voiceFolder]);
 
+  // --- UPDATED: OFFLINE-FIRST WIN CHECKER ---
   async function handleCheckCard() {
     if (!cardNumberToCheck) return alert("Please enter a card number.");
+    
     try {
-      // Send how many balls we've called locally so the server checks accurately
+      // 1. Try checking via internet first
       const ballsCalled = sequenceIndexRef.current;
       const response = await api.get(`/check_win/${game.id}/${cardNumberToCheck}/?balls_called=${ballsCalled}`);
       setCheckResult(response.data);
       setIsModalVisible(true);
     } catch (error) {
-      alert("Internet connection required to verify a WIN. Please reconnect to data/Wi-Fi to check card.");
+      // 2. OFFLINE FALLBACK: If internet fails, verify locally using phone's stored cards!
+      console.log("Offline mode: Verifying card locally...");
+      
+      const storedCards = localStorage.getItem('local_permanent_cards');
+      if (!storedCards) {
+        return alert("No local cards found. Please log in with internet at least once to cache cards.");
+      }
+      
+      const allCards = JSON.parse(storedCards);
+      const card = allCards.find(c => c.card_number === Number(cardNumberToCheck));
+      
+      if (!card) {
+        return alert(`Card #${cardNumberToCheck} not found in local memory.`);
+      }
+
+      const ballsCalledCount = sequenceIndexRef.current;
+      const effectiveCalls = gameSequence.slice(0, ballsCalledCount);
+      const calledSet = new Set(effectiveCalls);
+
+      let board = card.board;
+      if (typeof board === 'object' && !Array.isArray(board) && board !== null) {
+        board = [board.b, board.i, board.n, board.g, board.o];
+      }
+
+      let isWinner = false;
+      for (let rowIdx = 0; rowIdx < 5; rowIdx++) {
+        let rowWon = true;
+        for (let colIdx = 0; colIdx < 5; colIdx++) {
+          const cell = board[colIdx][rowIdx];
+          if (cell === "FREE" || cell === "★") continue;
+          if (!calledSet.has(cell)) {
+            rowWon = false;
+            break;
+          }
+        }
+        if (rowWon) {
+          isWinner = true;
+          break;
+        }
+      }
+
+      setCheckResult({
+        is_winner: isWinner,
+        card_number: card.card_number,
+        card_data: { board: board }
+      });
+      setIsModalVisible(true);
     }
   }
 
@@ -374,7 +414,6 @@ export default function GameRunner({ game, token, user, callSpeed, audioLanguage
                 
                 <div className="flex-1 flex flex-col gap-4 w-full">
                   
-                  {/* Primary Action Button */}
                   {!hasStarted ? (
                     <button onClick={handleStartGame} className="w-full py-6 rounded-xl font-black text-2xl bg-green-600 hover:bg-green-500 border-b-4 border-green-800 transition-all active:border-b-0 active:translate-y-1 shadow-[0_0_20px_rgba(34,197,94,0.4)]">
                       ▶ START GAME
@@ -385,7 +424,6 @@ export default function GameRunner({ game, token, user, callSpeed, audioLanguage
                     </button>
                   )}
 
-                  {/* Shuffle Button is now permanently under the Primary Action */}
                   <button onClick={handleShuffle} className="w-full py-4 rounded-xl font-black text-xl bg-teal-600 hover:bg-teal-700 border-b-4 border-teal-900 transition-all active:border-b-0 active:translate-y-1">
                     🎲 SHUFFLE (መቀላቀያ)
                   </button>
