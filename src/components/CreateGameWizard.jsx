@@ -6,14 +6,12 @@ const STORAGE_KEYS = {
   SELECTED_CARDS: 'vlad:lastSelectedCards',
   COMMISSION: 'vlad:lastCommission',
   ACTIVE_SEQUENCE: 'vlad:activeGameSequence',
-  // NEW KEYS TO SAVE EVERYTHING:
   BET_AMOUNT: 'vlad:lastBetAmount',
   GAME_SPEED: 'vlad:lastGameSpeed',
   WINNING_PATTERN: 'vlad:lastWinningPattern',
   AUDIO_LANGUAGE: 'vlad:lastAudioLanguage'
 };
 
-// Helpers to safely load data
 function loadNumber(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -46,7 +44,6 @@ function loadArray(key, fallback) {
 }
 
 export default function CreateGameWizard({ onCreated }) {
-  // LOAD EVERYTHING FROM MEMORY (with defaults if empty)
   const [gameSpeed, setGameSpeed] = useState(() => loadString(STORAGE_KEYS.GAME_SPEED, 'Regular'));
   const [betAmount, setBetAmount] = useState(() => loadNumber(STORAGE_KEYS.BET_AMOUNT, 10)); 
   const [audioLanguage, setAudioLanguage] = useState(() => loadString(STORAGE_KEYS.AUDIO_LANGUAGE, 'Amharic Male'));
@@ -66,7 +63,6 @@ export default function CreateGameWizard({ onCreated }) {
   const totalCards = 200;
   const cardNumbers = Array.from({ length: totalCards }, (_, i) => i + 1);
 
-  // SAVE EVERYTHING WHENEVER IT CHANGES
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.SELECTED_CARDS, JSON.stringify(Array.from(selectedCards)));
@@ -95,10 +91,15 @@ export default function CreateGameWizard({ onCreated }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (selectedCards.size < 3) {
+      return setError('You must select at least 3 cards to start a game.');
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
+      // 1. Try creating the game via the internet server normally
       const resp = await api.post('/games/create/', {
         amount: Number(betAmount),
         game_type: gameSpeed,
@@ -110,19 +111,35 @@ export default function CreateGameWizard({ onCreated }) {
       
       const gameData = resp.data;
 
-      // OFFLINE FIX: Save the 75 numbers to the phone memory
       if (gameData.calling_sequence) {
-        try {
-          localStorage.setItem(STORAGE_KEYS.ACTIVE_SEQUENCE, JSON.stringify(gameData.calling_sequence));
-        } catch (e) {
-          console.warn('Unable to persist calling sequence', e);
-        }
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_SEQUENCE, JSON.stringify(gameData.calling_sequence));
       }
       
-      // Pass the gameData to the GameRunner
       onCreated(gameData, { callSpeed: Number(callSpeed), audioLanguage });
+      
     } catch (err) {
-      setError(err.response?.data?.detail || 'Connection error. Internet is required to launch a game.');
+      console.log("Offline mode: Creating game locally...");
+      
+      // 2. OFFLINE FALLBACK: If internet fails, generate sequence and game locally!
+      let sequence = Array.from({ length: 75 }, (_, i) => i + 1);
+      for (let i = sequence.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [sequence[i], sequence[j]] = [sequence[j], sequence[i]];
+      }
+
+      const localGameData = {
+        id: Math.floor(Math.random() * 9000) + 1000, // Random local game ID
+        amount: Number(betAmount),
+        active_card_numbers: Array.from(selectedCards),
+        commission_percentage: Number(commissionPercentage),
+        winning_pattern: winningPattern,
+        calling_sequence: sequence
+      };
+
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_SEQUENCE, JSON.stringify(sequence));
+      
+      // Launch game offline successfully
+      onCreated(localGameData, { callSpeed: Number(callSpeed), audioLanguage });
     } finally {
       setIsLoading(false);
     }
