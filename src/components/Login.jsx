@@ -13,7 +13,19 @@ export default function Login({ onLogin }) {
       const token = resp.data.access;
       setToken(token);
       localStorage.setItem("token", token);
+      
       const me = await api.get("/me/");
+
+      // --- OFFLINE-FIRST: Cache permanent cards on successful login ---
+      try {
+        const cardsResp = await api.get("/permanent-cards/"); // Fetches all cards from backend
+        localStorage.setItem("local_permanent_cards", JSON.stringify(cardsResp.data));
+        console.log("Permanent cards successfully cached for offline play!");
+      } catch (cardErr) {
+        console.warn("Could not cache cards (might be offline already):", cardErr);
+      }
+      // -------------------------------------------------------------
+
       onLogin({ token, user: me.data });
     } catch (err) {
       setError("Invalid credentials");
