@@ -2,7 +2,9 @@ import axios from "axios";
 
 // This helper ensures we don't have double slashes // in our requests
 const getBaseURL = () => {
-  let url = import.meta.env.VITE_API_BASE || "http://localhost:8000/api";
+  // Hardcoded fallback points directly to your working Render backend
+  let url = import.meta.env.VITE_API_BASE || "https://yeab-game-zone-o5c7.onrender.com/api";
+  
   // If the URL ends with a slash, remove it
   if (url.endsWith('/')) {
     url = url.slice(0, -1);
