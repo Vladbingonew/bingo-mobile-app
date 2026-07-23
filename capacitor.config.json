@@ -1,0 +1,6 @@
+{
+  "appId": "com.vladbingo.app",
+  "appName": "Vlad Bingo",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
