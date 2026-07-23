@@ -1,0 +1,17 @@
+{
+  "name": "Vlad Bingo",
+  "short_name": "Vlad Bingo",
+  "description": "Play Bingo anywhere, even without internet.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#121212",
+  "icons": [
+    {
+      "src": "/v-logo.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
