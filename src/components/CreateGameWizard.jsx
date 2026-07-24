@@ -63,6 +63,25 @@ export default function CreateGameWizard({ onCreated }) {
   const totalCards = 200;
   const cardNumbers = Array.from({ length: totalCards }, (_, i) => i + 1);
 
+  // --- NEW FIX: BACKGROUND AUTO-DOWNLOADER ---
+  useEffect(() => {
+    const syncCards = async () => {
+      const stored = localStorage.getItem('local_permanent_cards');
+      // If cards are missing or empty, download them silently!
+      if (!stored || stored === '[]' || stored.length < 50) {
+        try {
+          const resp = await api.get('/permanent-cards/');
+          localStorage.setItem('local_permanent_cards', JSON.stringify(resp.data));
+          console.log("Cards auto-synced successfully in the background!");
+        } catch (e) {
+          console.warn("Auto-sync failed. Waiting for internet connection...", e);
+        }
+      }
+    };
+    syncCards();
+  }, []);
+  // -------------------------------------------
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.SELECTED_CARDS, JSON.stringify(Array.from(selectedCards)));
